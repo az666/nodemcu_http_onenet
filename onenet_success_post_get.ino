@@ -9,25 +9,23 @@ get为开关消息获取并执行。
 #include <ESP8266HTTPClient.h>
 #include <ArduinoJson.h>
 #include <DHT.h>
-#define LED 14
+#define LED 14                             //配网指示灯D5/GPIO14
 #define DEBUG 0
 #define ledPin 14                          // 定义ledPin连接到D5/GPIO14
-#define DHTPIN 12                         // what digital pin we're connected to; D6 GPIO12
+#define DHTPIN 12                         // 温湿度模块 D6 GPIO12
 #define DHTTYPE DHT11
 int ds;
-const char* ssid     = "maker_space";         // XXXXXX -- 使用时请修改为当前你的 wifi ssid
-const char* password = "chuangke666";     // XXXXXX -- 使用时请修改为当前你的 wifi 密码
 const char* host = "api.heclouds.com";
-const char* APIKEY = "dDu2j8l23dNMJSWv5XVqfc6hXoM=";    // API KEY
-int32_t deviceId = 28315875;                             // Device ID
-const char* DataStreams = "led";                // 数据流
-const char* DS_Temp = "wendu";                        // 数据流 - Temp
+const char* APIKEY = "dDu2j8l23dNMJSWv5XVqfc6hXoM=";    // API KEY    改成你自己的
+int32_t deviceId = 28315875;                             // Device ID    改成你自己的
+const char* DataStreams = "led";           //四个数据流       改成你自己的
+const char* DS_Temp = "wendu";
 const char* DS_Baojing = "w_baojing";
 const char* DS_Hum = "shidu";
 const size_t MAX_CONTENT_SIZE = 1024;
 const unsigned long HTTP_TIMEOUT = 2100;               // max respone time from server
 WiFiClient client;
-const int tcpPort = 80;
+const int tcpPort = 80;                                //80端口
 DHT dht(DHTPIN, DHTTYPE);
 struct UserData {
   int errno_val;                // 错误返回值
@@ -96,7 +94,7 @@ bool parseUserData_test(char* content, struct UserData* userData) {
 void colLED(int sta) {
   digitalWrite(ledPin, sta);
 }
-void smartConfig()
+void smartConfig()//智能配网，可以微信扫一扫进行配网，或者用app进行配网。
 {
   WiFi.mode(WIFI_STA);
   Serial.println("\r\nWait for Smartconfig");
@@ -117,32 +115,39 @@ void smartConfig()
     }
   }
 }
-void setup() {
-  WiFi.mode(WIFI_AP_STA);                 //set work mode:  WIFI_AP /WIFI_STA /WIFI_AP_STA
-  Serial.begin(115200);
-  pinMode(ledPin, OUTPUT);
-  dht.begin();
-  smartConfig();
-}
-void loop() {
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
-  if (isnan(h) || isnan(t)) {
-    Serial.println("Failed to read from DHT sensor!");
-    return;
-  }
+void tcp_test () {
   if (!client.connect(host, tcpPort)) {//链接tcp服务器测试
     Serial.println("connection failed");
     return;
   }
-  getdata(); 
-   if (!client.connect(host, tcpPort)) {//链接tcp服务器测试
-    Serial.println("connection failed");
+}
+void setup() {
+  WiFi.mode(WIFI_AP_STA);                 //set work mode:  WIFI_AP /WIFI_STA /WIFI_AP_STA
+  Serial.begin(115200);                  //传输波特率
+  pinMode(ledPin, OUTPUT);
+  dht.begin();                            //初始化温湿度模块
+  smartConfig();                          //开启自动配网。
+}
+void loop() {
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+  if (isnan(h) || isnan(t)) {             //检测dht温湿度故障
+    Serial.println("Failed to read from DHT sensor!");
     return;
   }
-  postData(deviceId, t, h);    
+  tcp_test ();                             //tcp链接校验
+  getdata();                                //获取下发的数据流
+  tcp_test ();                              //tcp链接校验
+  postData(deviceId, t, h);                 //发送上报的数据流
 }
-void postData(int dId, float val_t, float val_h) {
+
+
+
+
+
+
+
+void postData(int dId, float val_t, float val_h) {    //采用post方式发包，进行http协议温湿度上传
   String url = "/devices/";
   url += String(dId);
   url += "/datapoints?type=3";           //http://open.iot.10086.cn/doc/art190.html#43
@@ -153,12 +158,12 @@ void postData(int dId, float val_t, float val_h) {
   String post_data = "POST " + url + " HTTP/1.1\r\n" +
                      "api-key:" + APIKEY + "\r\n" +
                      "Host:" + host + "\r\n" +
-                     "Content-Length: " + String(data.length()) + "\r\n" +                     //发送数据长度
+                     "Content-Length: " + String(data.length()) + "\r\n" +
                      "Connection: close\r\n\r\n" +
                      data;
   client.print(post_data);
 }
-void getdata() {
+void getdata() {                         //采用get方式获取服务器数据反馈进行开关继电器操作
   // We now create a URI for the request
   String url2 = "/devices/";
   url2 += String(deviceId);
